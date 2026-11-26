@@ -3,16 +3,21 @@ let password="",sessionId="",poller=null,busy=false;
 async function api(path,body={}){const r=await fetch("/api/"+path,{method:"POST",headers:{"Content-Type":"application/json","x-browser-password":password,"x-session-id":sessionId},body:JSON.stringify(body)});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||"Erreur serveur");return d}
 function status(t){$("status").textContent=t}
 async function login(){
- password=$("password").value;
+ const error=$("loginError");
+ const btn=$("loginBtn");
+ error.textContent="Connexion en cours…";
+ btn.disabled=true;
+ btn.textContent="Connexion…";
+ password=$("password").value.trim();
  try{const r=await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password})});const d=await r.json();if(!r.ok)throw Error(d.error||"Connexion refusée");
  const s=await fetch("/api/session",{method:"POST",headers:{"x-browser-password":password}});const j=await s.json();if(!s.ok)throw Error(j.error||"Démarrage impossible");
  sessionId=j.sessionId;$("login").style.display="none";$("address").value="https://www.google.com/";$("screen").style.display="block";status("Connecté à Google");startPolling();
- }catch(e){$("loginError").textContent=e.message}
+ }catch(e){$("loginError").textContent=e.message || "Erreur de connexion. Vérifie le serveur Render."; status("Connexion impossible");} finally {btn.disabled=false;btn.textContent="Entrer";}
 }
 async function poll(){if(busy||!sessionId)return;try{busy=true;const [img,info]=await Promise.all([fetch("/api/screenshot",{headers:{"x-browser-password":password,"x-session-id":sessionId},cache:"no-store"}),fetch("/api/info",{headers:{"x-browser-password":password,"x-session-id":sessionId},cache:"no-store"})]);if(img.ok){const blob=await img.blob();$("screen").src=URL.createObjectURL(blob);$("loading").style.display="none"}if(info.ok){const d=await info.json();if(document.activeElement!==$("address"))$("address").value=d.url;status(d.title||d.url)}}catch(e){status("Reconnexion…")}finally{busy=false}}
 function startPolling(){poll();poller=setInterval(poll,750)}
 async function act(name,body={}){try{await api(name,body);if(name==="navigate")status("Chargement…");setTimeout(poll,300)}catch(e){status(e.message)}}
-$("loginBtn").onclick=login;$("password").addEventListener("keydown",e=>{if(e.key==="Enter")login()});
+$("loginBtn").addEventListener("click", e=>{e.preventDefault();login();}); $("password").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();login();}});
 $("addressForm").onsubmit=e=>{e.preventDefault();act("navigate",{url:$("address").value})};
 $("back").onclick=()=>act("back");$("forward").onclick=()=>act("forward");$("reload").onclick=()=>act("reload");
 $("home").onclick=()=>{$("address").value="https://www.google.com/";act("navigate",{url:"https://www.google.com/"})};
