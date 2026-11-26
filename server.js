@@ -111,68 +111,28 @@ async function newSession() {
     permissions: ["geolocation", "notifications", "microphone", "camera"],
   });
 
-  // Hide classic automation signals + better WebGL/canvas for games (Poki, Crazy Games, Discord)
-  await context.addInitScript(() => {
-    // navigator.webdriver
-    Object.defineProperty(navigator, "webdriver", {
-      get: () => undefined,
-    });
-
-    // Chrome runtime
-    window.chrome = {
-      runtime: {},
-      loadTimes: function () {},
-      csi: function () {},
-      app: {},
-    };
-
-    // Plugins
-    Object.defineProperty(navigator, "plugins", {
-      get: () => [1, 2, 3, 4, 5],
-    });
-    Object.defineProperty(navigator, "languages", {
-      get: () => ["fr-FR", "fr", "en-US", "en"],
-    });
-    Object.defineProperty(navigator, "hardwareConcurrency", { get: () => 8 });
-    Object.defineProperty(navigator, "deviceMemory", { get: () => 8 });
-
-    // Permissions query spoof
-    const originalQuery = window.navigator.permissions.query;
-    window.navigator.permissions.query = (parameters) =>
-      parameters.name === "notifications"
-        ? Promise.resolve({ state: Notification.permission })
-        : originalQuery(parameters);
-
-    // WebGL vendor/renderer (important for browser games)
-    const getParameter = WebGLRenderingContext.prototype.getParameter;
-    WebGLRenderingContext.prototype.getParameter = function (parameter) {
-      if (parameter === 37445) return "Google Inc. (NVIDIA)";
-      if (parameter === 37446) return "ANGLE (NVIDIA, NVIDIA GeForce GTX 1660 Super Direct3D11 vs_5_0 ps_5_0)";
-      return getParameter.call(this, parameter);
-    };
-
-    // Also patch WebGL2 if present
-    if (typeof WebGL2RenderingContext !== "undefined") {
-      const getParameter2 = WebGL2RenderingContext.prototype.getParameter;
-      WebGL2RenderingContext.prototype.getParameter = function (parameter) {
-        if (parameter === 37445) return "Google Inc. (NVIDIA)";
-        if (parameter === 37446) return "ANGLE (NVIDIA, NVIDIA GeForce GTX 1660 Super Direct3D11 vs_5_0 ps_5_0)";
-        return getParameter2.call(this, parameter);
-      };
-    }
-  });
-
+  // Keep the browser environment unmodified so websites can perform their
+  // normal security checks. CAPTCHA challenges must be completed by the user.
   const page = await context.newPage();
 
   // Block only private / local destinations
+  // Validate network destinations while keeping ordinary CAPTCHA resources available.
+  // Cache DNS checks briefly to avoid a DNS lookup for every image/script request.
+  const hostChecks = new Map();
   await page.route("**/*", async (route) => {
     const url = route.request().url();
-    if (url.startsWith("data:") || url.startsWith("blob:") || url.startsWith("about:")) {
-      return route.continue();
-    }
-    if (!(await publicHttpUrl(url))) {
-      return route.abort("blockedbyclient");
-    }
+    if (url.startsWith("data:") || url.startsWith("blob:") || url.startsWith("about:")) return route.continue();
+    let allowed = false;
+    try {
+      const host = new URL(url).hostname.toLowerCase();
+      const cached = hostChecks.get(host);
+      if (cached && Date.now() - cached.time < 30000) allowed = cached.allowed;
+      else {
+        allowed = await publicHttpUrl(url);
+        hostChecks.set(host, { allowed, time: Date.now() });
+      }
+    } catch {}
+    if (!allowed) return route.abort("blockedbyclient");
     return route.continue();
   });
 
