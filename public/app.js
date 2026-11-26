@@ -1,5 +1,5 @@
 const $=id=>document.getElementById(id);
-let password="",sessionId="",poller=null,infoTimer=null,busy=false,actionQueue=Promise.resolve(),lastObjectUrl="";
+let password="",sessionId="",poller=null,infoTimer=null,credentialTimer=null,busy=false,actionQueue=Promise.resolve(),lastObjectUrl="";
 const SCREEN_W=1280,SCREEN_H=800;
 async function api(path,body={}){const r=await fetch("/api/"+path,{method:"POST",headers:{"Content-Type":"application/json","x-browser-password":password,"x-session-id":sessionId},body:JSON.stringify(body)});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||"Erreur serveur");return d}
 function status(t){$("status").textContent=t}
@@ -20,8 +20,8 @@ async function poll(){
  }catch(e){status("Reconnexion…")}finally{busy=false}
 }
 async function refreshInfo(){if(!sessionId)return;try{const r=await fetch("/api/info",{headers:{"x-browser-password":password,"x-session-id":sessionId},cache:"no-store"});if(r.ok){const d=await r.json();if(document.activeElement!==$("address"))$("address").value=d.url;status(d.title||d.url)}}catch{}}
-function startPolling(){stopPolling();poll();refreshInfo();poller=setInterval(poll,650);infoTimer=setInterval(refreshInfo,2500)}
-function stopPolling(){clearInterval(poller);clearInterval(infoTimer);poller=infoTimer=null}
+function startPolling(){stopPolling();poll();refreshInfo();checkCredentialPrompts();poller=setInterval(poll,650);infoTimer=setInterval(refreshInfo,2500);credentialTimer=setInterval(checkCredentialPrompts,1800)}
+function stopPolling(){clearInterval(poller);clearInterval(infoTimer);clearInterval(credentialTimer);poller=infoTimer=credentialTimer=null}
 function act(name,body={}){actionQueue=actionQueue.then(async()=>{if(!sessionId)return;try{await api(name,body);if(name==="navigate")status("Chargement…");await poll()}catch(e){status(e.message)}});return actionQueue}
 function screenPoint(e){
  const img=$("screen"),r=img.getBoundingClientRect(),scale=Math.min(r.width/SCREEN_W,r.height/SCREEN_H);
@@ -75,13 +75,21 @@ function renderVault() {
     const user = document.createElement("small"); user.textContent = entry.username || "Aucun nom d’utilisateur";
     info.append(site, user);
     const actions = document.createElement("div"); actions.className = "vault-actions";
+    const fill = document.createElement("button"); fill.type = "button"; fill.textContent = "Remplir sur ce site";
+    fill.onclick = async () => {
+      if (!confirm("Remplir le formulaire visible avec les identifiants de " + entry.site + " ? Rien ne sera envoyé avant que tu valides toi-même le formulaire.")) return;
+      try {
+        const result = await api("autofill", { username: entry.username, secret: entry.secret });
+        status(result.usernameFilled ? "Identifiant et mot de passe remplis." : "Mot de passe rempli.");
+      } catch (e) { status(e.message); }
+    };
     const copyUser = document.createElement("button"); copyUser.type = "button"; copyUser.textContent = "Copier identifiant";
     copyUser.onclick = () => copyVault(entry.username, "Identifiant");
     const copyPass = document.createElement("button"); copyPass.type = "button"; copyPass.textContent = "Copier mot de passe";
     copyPass.onclick = () => copyVault(entry.secret, "Mot de passe");
     const remove = document.createElement("button"); remove.type = "button"; remove.textContent = "Supprimer";
     remove.onclick = () => { passwordVault.splice(index, 1); renderVault(); };
-    actions.append(copyUser, copyPass, remove); card.append(info, actions); list.append(card);
+    actions.append(fill, copyUser, copyPass, remove); card.append(info, actions); list.append(card);
   });
 }
 async function copyVault(value, label) {
@@ -107,4 +115,27 @@ $("vaultClear").addEventListener("click", () => {
     passwordVault.splice(0); renderVault(); status("Coffre temporaire vidé.");
   }
 });
+async function checkCredentialPrompts() {
+  if (!sessionId) return;
+  try {
+    const r = await fetch("/api/credential-prompt", {
+      headers: { "x-browser-password": password, "x-session-id": sessionId },
+      cache: "no-store"
+    });
+    if (!r.ok) return;
+    const data = await r.json();
+    for (const item of (data.prompts || [])) {
+      const save = confirm("PRIVATE BROWSER a détecté une connexion sur " + item.site +
+        (item.username ? "\\nIdentifiant : " + item.username : "") +
+        "\\n\\nEnregistrer ce mot de passe uniquement pour cette session ?");
+      if (save) {
+        const existing = passwordVault.findIndex(entry => entry.site === item.site && entry.username === item.username);
+        const entry = { site: item.site, username: item.username, secret: item.secret };
+        if (existing >= 0) passwordVault[existing] = entry; else passwordVault.push(entry);
+        status("Connexion enregistrée temporairement pour " + item.site + ".");
+        if (!vault.hidden) renderVault();
+      }
+    }
+  } catch {}
+}
 function clearPasswordVault() { passwordVault.splice(0); renderVault(); vault.hidden = true; }
