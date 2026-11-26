@@ -33,8 +33,8 @@ $("password").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefaul
 $("addressForm").onsubmit=e=>{e.preventDefault();act("navigate",{url:$("address").value})};
 $("back").onclick=()=>act("back");$("forward").onclick=()=>act("forward");$("reload").onclick=()=>act("reload");
 $("home").onclick=()=>{$("address").value="https://www.google.com/";act("navigate",{url:"https://www.google.com/"})};
-$("newTab").onclick=async()=>{if(!confirm("Créer une nouvelle session privée ? La session actuelle sera fermée."))return;await act("close");sessionId="";stopPolling();$("login").style.display="grid";$("password").value="";$("loginError").textContent="Connecte-toi pour démarrer une nouvelle session."};
-$("close").onclick=async()=>{if(confirm("Fermer la session et effacer ses données temporaires ?")){await act("close");sessionId="";stopPolling();$("login").style.display="grid";$("password").value="";$("loginError").textContent="Session fermée."}};
+$("newTab").onclick=async()=>{if(!confirm("Créer une nouvelle session privée ? La session actuelle sera fermée."))return;await act("close");sessionId="";clearPasswordVault();stopPolling();$("login").style.display="grid";$("password").value="";$("loginError").textContent="Connecte-toi pour démarrer une nouvelle session."};
+$("close").onclick=async()=>{if(confirm("Fermer la session et effacer ses données temporaires ?")){await act("close");sessionId="";clearPasswordVault();stopPolling();$("login").style.display="grid";$("password").value="";$("loginError").textContent="Session fermée."}};
 $("screen").addEventListener("click",e=>act("click",screenPoint(e)));
 $("screen").addEventListener("wheel",e=>{e.preventDefault();act("scroll",{delta:e.deltaY})},{passive:false});
 document.addEventListener("keydown",e=>{
@@ -53,3 +53,58 @@ $("geforceDirect")?.addEventListener("click",()=>{
   window.open("https://play.geforcenow.com/","_blank","noopener,noreferrer");
   status("GeForce NOW s’ouvre dans un onglet Chrome séparé.");
 });
+
+
+// Temporary password vault: data stays in this tab's memory and is never sent to the server.
+const passwordVault = [];
+const vault = $("passwordManager");
+function renderVault() {
+  const list = $("vaultList");
+  list.replaceChildren();
+  if (!passwordVault.length) {
+    const empty = document.createElement("p");
+    empty.className = "vault-empty";
+    empty.textContent = "Aucun mot de passe enregistré.";
+    list.append(empty);
+    return;
+  }
+  passwordVault.forEach((entry, index) => {
+    const card = document.createElement("div"); card.className = "vault-entry";
+    const info = document.createElement("div");
+    const site = document.createElement("strong"); site.textContent = entry.site;
+    const user = document.createElement("small"); user.textContent = entry.username || "Aucun nom d’utilisateur";
+    info.append(site, user);
+    const actions = document.createElement("div"); actions.className = "vault-actions";
+    const copyUser = document.createElement("button"); copyUser.type = "button"; copyUser.textContent = "Copier identifiant";
+    copyUser.onclick = () => copyVault(entry.username, "Identifiant");
+    const copyPass = document.createElement("button"); copyPass.type = "button"; copyPass.textContent = "Copier mot de passe";
+    copyPass.onclick = () => copyVault(entry.secret, "Mot de passe");
+    const remove = document.createElement("button"); remove.type = "button"; remove.textContent = "Supprimer";
+    remove.onclick = () => { passwordVault.splice(index, 1); renderVault(); };
+    actions.append(copyUser, copyPass, remove); card.append(info, actions); list.append(card);
+  });
+}
+async function copyVault(value, label) {
+  if (!value) { status(label + " indisponible"); return; }
+  try { await navigator.clipboard.writeText(value); status(label + " copié."); }
+  catch { status("Copie refusée par le navigateur."); }
+}
+$("passwordManagerBtn").addEventListener("click", () => {
+  if (!sessionId) { status("Connecte-toi d’abord."); return; }
+  vault.hidden = false; renderVault();
+});
+$("vaultClose").addEventListener("click", () => { vault.hidden = true; });
+vault.addEventListener("click", e => { if (e.target === vault) vault.hidden = true; });
+$("vaultForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const site = $("vaultSite").value.trim(), username = $("vaultUser").value.trim(), secret = $("vaultPass").value;
+  if (!site || !secret) return;
+  passwordVault.push({ site, username, secret });
+  $("vaultForm").reset(); renderVault(); status("Mot de passe gardé temporairement dans cet onglet.");
+});
+$("vaultClear").addEventListener("click", () => {
+  if (passwordVault.length && confirm("Effacer tous les mots de passe temporaires ?")) {
+    passwordVault.splice(0); renderVault(); status("Coffre temporaire vidé.");
+  }
+});
+function clearPasswordVault() { passwordVault.splice(0); renderVault(); vault.hidden = true; }
