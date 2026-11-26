@@ -126,8 +126,8 @@ async function checkCredentialPrompts() {
     const data = await r.json();
     for (const item of (data.prompts || [])) {
       const save = confirm("PRIVATE BROWSER a détecté une connexion sur " + item.site +
-        (item.username ? "\\nIdentifiant : " + item.username : "") +
-        "\\n\\nEnregistrer ce mot de passe uniquement pour cette session ?");
+        (item.username ? "\nIdentifiant : " + item.username : "") +
+        "\n\nEnregistrer ce mot de passe uniquement pour cette session ?");
       if (save) {
         const existing = passwordVault.findIndex(entry => entry.site === item.site && entry.username === item.username);
         const entry = { site: item.site, username: item.username, secret: item.secret };
