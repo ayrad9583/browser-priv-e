@@ -25,9 +25,23 @@
   <button type="button" data-url="https://chatgpt.com/">ChatGPT</button>
   <button type="button" data-url="https://claude.ai/">Claude</button>
   <button type="button" data-url="https://grok.com/">Grok</button>
-  <button type="button" id="geforceDirect">GeForce NOW ↗</button>
+  <button type="button" id="geforceDirect">GeForce NOW ↗</button><button type="button" id="passwordManagerBtn">🔑 Mots de passe</button>
 </section>
 <main><div class="screen-wrap"><img id="screen" alt="Écran du navigateur distant"><div id="loading">Connexion au navigateur…</div></div></main>
 <footer><span id="status">Prêt</span><span>Session temporaire · Expiration après 30 min d'inactivité</span></footer>
+
+<div id="passwordManager" class="vault-overlay" hidden>
+<section class="vault-card" role="dialog" aria-modal="true" aria-labelledby="vaultTitle">
+<div class="vault-head"><div><h2 id="vaultTitle">🔑 Gestionnaire de mots de passe</h2><p>Stockage temporaire, uniquement pendant cette session.</p></div><button id="vaultClose" type="button">✕</button></div>
+<form id="vaultForm" class="vault-form">
+<label>Site ou adresse<input id="vaultSite" type="text" placeholder="https://exemple.com" required></label>
+<label>Nom d’utilisateur<input id="vaultUser" type="text" autocomplete="off" placeholder="Nom d’utilisateur"></label>
+<label>Mot de passe<input id="vaultPass" type="password" autocomplete="new-password" placeholder="Mot de passe" required></label>
+<button type="submit">Enregistrer pour cette session</button>
+</form>
+<div class="vault-warning">Les mots de passe restent en mémoire dans cet onglet. Ils sont effacés à la fermeture de la session, à la fermeture de l’onglet ou au rechargement. N’utilise pas cette fonction sur un appareil partagé.</div>
+<div class="vault-list-head"><b>Enregistrés temporairement</b><button id="vaultClear" type="button">Tout effacer</button></div>
+<div id="vaultList" class="vault-list"><p class="vault-empty">Aucun mot de passe enregistré.</p></div>
+</section></div>
 <script src="app.js"></script>
 </body></html>
