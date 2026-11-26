@@ -226,7 +226,7 @@ app.get("/api/screenshot", auth, async (req, res) => {
   const s = await getSession(req, res);
   if (!s) return;
   try {
-    const image = await s.page.screenshot({ type: "jpeg", quality: 78, timeout: 10000 });
+    const image = await s.page.screenshot({ type: "jpeg", quality: 68, timeout: 10000 });
     res.set("Content-Type", "image/jpeg").set("Cache-Control", "no-store").send(image);
   } catch {
     res.status(502).end();
