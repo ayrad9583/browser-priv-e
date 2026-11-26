@@ -46,3 +46,10 @@ document.addEventListener("keydown",e=>{
 });
 window.addEventListener("beforeunload",()=>{if(sessionId)navigator.sendBeacon("/api/close")});
 document.querySelectorAll(".quick-sites button").forEach(button=>button.addEventListener("click",()=>{$("address").value=button.dataset.url;act("navigate",{url:button.dataset.url})}));
+
+// GeForce NOW needs a native supported browser tab: remote screenshot streaming
+// cannot carry its low-latency video, audio, and controller input correctly.
+$("geforceDirect")?.addEventListener("click",()=>{
+  window.open("https://play.geforcenow.com/","_blank","noopener,noreferrer");
+  status("GeForce NOW s’ouvre dans un onglet Chrome séparé.");
+});
