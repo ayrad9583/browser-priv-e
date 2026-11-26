@@ -114,6 +114,42 @@ async function newSession() {
   // Keep the browser environment unmodified so websites can perform their
   // normal security checks. CAPTCHA challenges must be completed by the user.
   const page = await context.newPage();
+  const pendingCredentials = [];
+  await page.exposeBinding("__privateBrowserCredentialPrompt", (_source, data) => {
+    if (!data || typeof data.password !== "string" || !data.password) return;
+    const item = {
+      site: (() => { try { return new URL(data.url || page.url()).hostname; } catch { return "Site Web"; } })(),
+      url: String(data.url || page.url()).slice(0, 2000),
+      username: String(data.username || "").slice(0, 500),
+      secret: data.password.slice(0, 2000),
+      createdAt: Date.now()
+    };
+    // Keep only the latest few prompts in server memory; never log or persist credentials.
+    pendingCredentials.push(item);
+    if (pendingCredentials.length > 3) pendingCredentials.shift();
+  });
+  await page.addInitScript(() => {
+    const readForm = (form) => {
+      const fields = Array.from(form.querySelectorAll("input"));
+      const pass = fields.find(el => el.type === "password" && el.value);
+      if (!pass) return;
+      const user = fields.find(el => /user|email|login|identifier/i.test((el.name || "") + " " + (el.autocomplete || "") + " " + (el.type || "")) && el.type !== "password");
+      window.__privateBrowserCredentialPrompt?.({
+        url: location.href,
+        username: user?.value || "",
+        password: pass.value
+      });
+    };
+    document.addEventListener("submit", event => {
+      if (event.target instanceof HTMLFormElement) readForm(event.target);
+    }, true);
+    document.addEventListener("click", event => {
+      const button = event.target?.closest?.('button, input[type="submit"], [role="button"]');
+      if (!button) return;
+      const form = button.form || button.closest("form") || document.querySelector("form");
+      if (form) readForm(form);
+    }, true);
+  });
 
   // Block only private / local destinations
   // Validate network destinations while keeping ordinary CAPTCHA resources available.
@@ -140,7 +176,7 @@ async function newSession() {
   await page.goto("https://www.google.com/", { waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => {});
 
   const id = crypto.randomUUID();
-  sessions.set(id, { context, page, lastUsed: Date.now() });
+  sessions.set(id, { context, page, pendingCredentials, lastUsed: Date.now() });
   return id;
 }
 
@@ -219,6 +255,47 @@ app.post("/api/:action", auth, async (req, res) => {
   } catch (e) {
     console.error(e);
     res.status(502).json({ error: "La page n'a pas répondu. Réessaie ou vérifie l'adresse." });
+  }
+});
+
+app.get("/api/credential-prompt", auth, async (req, res) => {
+  const s = await getSession(req, res);
+  if (!s) return;
+  res.set("Cache-Control", "no-store");
+  res.json({ prompts: s.pendingCredentials.splice(0).map(item => ({
+    site: item.site, url: item.url, username: item.username, secret: item.secret
+  })) });
+});
+
+app.post("/api/autofill", auth, async (req, res) => {
+  const s = await getSession(req, res);
+  if (!s) return;
+  const username = String(req.body?.username || "").slice(0, 500);
+  const secret = String(req.body?.secret || "").slice(0, 2000);
+  if (!secret) return res.status(400).json({ error: "Mot de passe manquant." });
+  try {
+    const result = await s.page.evaluate(({ username, secret }) => {
+      const visible = el => !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+      const pass = Array.from(document.querySelectorAll('input[type="password"]')).find(visible);
+      if (!pass) return { ok: false, reason: "Aucun champ de mot de passe visible." };
+      const form = pass.form || pass.closest("form") || document;
+      const candidates = Array.from(form.querySelectorAll('input:not([type="password"]):not([type="hidden"])')).filter(visible);
+      const user = candidates.find(el => /user|email|login|identifier/i.test((el.name || "") + " " + (el.autocomplete || "") + " " + (el.type || ""))) || candidates[0];
+      const set = (el, value) => {
+        if (!el) return;
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+        setter ? setter.call(el, value) : (el.value = value);
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+        el.dispatchEvent(new Event("change", { bubbles: true }));
+      };
+      if (username && user) set(user, username);
+      set(pass, secret);
+      return { ok: true, usernameFilled: !!(username && user) };
+    }, { username, secret });
+    if (!result.ok) return res.status(404).json({ error: result.reason });
+    res.json(result);
+  } catch {
+    res.status(500).json({ error: "Impossible de remplir ce formulaire." });
   }
 });
 
