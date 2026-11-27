@@ -33,6 +33,23 @@ $("password").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefaul
 $("addressForm").onsubmit=e=>{e.preventDefault();act("navigate",{url:$("address").value})};
 $("back").onclick=()=>act("back");$("forward").onclick=()=>act("forward");$("reload").onclick=()=>act("reload");
 $("home").onclick=()=>{$("address").value="https://www.google.com/";act("navigate",{url:"https://www.google.com/"})};
+const fullscreenBtn = $("fullscreenBtn");
+function updateFullscreenButton() {
+  const active = !!document.fullscreenElement;
+  fullscreenBtn.textContent = active ? "⛶" : "⛶";
+  fullscreenBtn.title = active ? "Quitter le plein écran (Échap)" : "Plein écran";
+  fullscreenBtn.setAttribute("aria-label", fullscreenBtn.title);
+}
+fullscreenBtn.addEventListener("click", async () => {
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else await document.documentElement.requestFullscreen();
+  } catch {
+    status("Le plein écran n’est pas autorisé par ce navigateur.");
+  }
+});
+document.addEventListener("fullscreenchange", updateFullscreenButton);
+updateFullscreenButton();
 $("newTab").onclick=async()=>{if(!confirm("Créer une nouvelle session privée ? La session actuelle sera fermée."))return;await act("close");sessionId="";clearPasswordVault();stopPolling();$("login").style.display="grid";$("password").value="";$("loginError").textContent="Connecte-toi pour démarrer une nouvelle session."};
 $("close").onclick=async()=>{if(confirm("Fermer la session et effacer ses données temporaires ?")){await act("close");sessionId="";clearPasswordVault();stopPolling();$("login").style.display="grid";$("password").value="";$("loginError").textContent="Session fermée."}};
 $("screen").addEventListener("click",e=>act("click",screenPoint(e)));
