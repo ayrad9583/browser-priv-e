@@ -20,7 +20,7 @@ async function poll(){
  }catch(e){status("Reconnexion…")}finally{busy=false}
 }
 async function refreshInfo(){if(!sessionId)return;try{const r=await fetch("/api/info",{headers:{"x-browser-password":password,"x-session-id":sessionId},cache:"no-store"});if(r.ok){const d=await r.json();if(document.activeElement!==$("address"))$("address").value=d.url;status(d.title||d.url)}}catch{}}
-function startPolling(){stopPolling();poll();refreshInfo();checkCredentialPrompts();poller=setInterval(poll,650);infoTimer=setInterval(refreshInfo,2500);credentialTimer=setInterval(checkCredentialPrompts,1800)}
+function startPolling(){stopPolling();poll();refreshInfo();checkCredentialPrompts();poller=setInterval(poll,200);infoTimer=setInterval(refreshInfo,2500);credentialTimer=setInterval(checkCredentialPrompts,1800)}
 function stopPolling(){clearInterval(poller);clearInterval(infoTimer);clearInterval(credentialTimer);poller=infoTimer=credentialTimer=null}
 function act(name,body={}){actionQueue=actionQueue.then(async()=>{if(!sessionId)return;try{await api(name,body);if(name==="navigate")status("Chargement…");await poll()}catch(e){status(e.message)}});return actionQueue}
 function screenPoint(e){
