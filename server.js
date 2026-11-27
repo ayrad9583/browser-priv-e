@@ -155,7 +155,7 @@ async function newSession() {
   // Validate network destinations while keeping ordinary CAPTCHA resources available.
   // Cache DNS checks briefly to avoid a DNS lookup for every image/script request.
   const hostChecks = new Map();
-  await page.route("**/*", async (route) => {
+  await context.route("**/*", async (route) => {
     const url = route.request().url();
     if (url.startsWith("data:") || url.startsWith("blob:") || url.startsWith("about:")) return route.continue();
     let allowed = false;
@@ -176,7 +176,18 @@ async function newSession() {
   await page.goto("https://www.google.com/", { waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => {});
 
   const id = crypto.randomUUID();
-  sessions.set(id, { context, page, pendingCredentials, lastUsed: Date.now() });
+  const session = { context, page, pendingCredentials, lastUsed: Date.now() };
+  sessions.set(id, session);
+
+  // OAuth and account providers often open a separate popup window.
+  // Follow that popup in the remote screen instead of leaving the user on the old page.
+  context.on("page", (popup) => {
+    if (popup === page) return;
+    session.page = popup;
+    popup.on("close", () => {
+      if (session.page === popup && !page.isClosed()) session.page = page;
+    });
+  });
   return id;
 }
 
